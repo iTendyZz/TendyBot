@@ -14,3 +14,7 @@ cp_btn4 = types.InlineKeyboardButton(text='Удалить продукт', callb
 cp_btn5 = types.InlineKeyboardButton(text='Изменить данные о продукте', callback_data='change_product_info')
 cat_and_prod_kb.add(cp_btn1, cp_btn2, cp_btn3, cp_btn4, cp_btn5, admin_return_btn)
 
+prod_delivery_kb = types.InlineKeyboardMarkup()
+prod_delivery_btn = types.InlineKeyboardButton(text='Принять товар', callback_data='product_delivery_accept')
+prod_delivery_kb.add(prod_delivery_btn)
+

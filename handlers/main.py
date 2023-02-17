@@ -24,11 +24,24 @@ def start_message(message):
     if basket is not None:
         basket_btn = types.InlineKeyboardButton(text='Корзина', callback_data='view_shop_basket')
         start_kb.add(basket_btn)
+    cursor.execute(f'''SELECT * FROM user_logins WHERE user_id = {message.chat.id}''')
+    logins = cursor.fetchall()
+    if logins is not None:
+        logins_btn = types.InlineKeyboardButton(text='Ваши покупки', callback_data=f'show_buys_{message.chat.id}')
+        start_kb.add(logins_btn)
     bot.delete_message(message.chat.id, message.id)
     bot.send_message(message.chat.id, f'''Здарова, _{message.chat.first_name}_!
 *TendyShop привествует нового клиента!*
 Чтобы проверить каталог нажми на кнопочку!''', parse_mode='markdown', reply_markup=start_kb)
     
+
+def show_buys(callback):
+    cursor.execute(f'''SELECT login, password, product_name FROM user_logins WHERE user_id = {callback.from_user.id}''')
+    logins_info = cursor.fetchall()
+    info = ''
+    for login, password, product_name in logins_info:
+        info += f'{login}:{password} ({product_name})\n'
+    bot.edit_message_text(text=f'Ваши покупки:\n{info}', message_id=callback.message.id, chat_id=callback.message.chat.id, reply_markup=kb_main.return_keyboard)
 
 
 def show_user_chat_id(message):
@@ -57,4 +70,5 @@ def bot_register_main_handlers():
     bot.register_callback_query_handler(admin_feedback, func=lambda callback: 'send_feedback_' in callback.data)
     bot.register_callback_query_handler(back_to_message, func=lambda callback: 'back_to_' in callback.data)
     bot.register_message_handler(show_user_chat_id, commands=['show_id'])
+    bot.register_callback_query_handler(show_buys, func=lambda callback: 'show_buys_' in callback.data)
 

@@ -43,3 +43,12 @@ def create_tables():
         product_id INT,
         cost INT)''')
     db.commit()
+
+
+    cursor.execute('''CREATE TABLE IF NOT EXISTS user_logins(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INT,
+        login TEXT,
+        password TEXT,
+        product_name TEXT)''')
+    db.commit()

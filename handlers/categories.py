@@ -103,17 +103,37 @@ def display_shop_basket(callback):
     user_products = ''
     total_cost = 0
     basket_kb = types.InlineKeyboardMarkup(row_width=1)
-    buy_btn = types.InlineKeyboardButton(text='Купить всё', callback_data=f'buy_all_products')
+    buy_btn = types.InlineKeyboardButton(text='Купить всё', callback_data='buy_all_products')
     basket_kb.add(buy_btn)
     for product_name, product_price, product_id in user_basket:
-        basket_btn = types.InlineKeyboardButton(text=product_name, callback_data=f'basket_product_{product_id}')
+        basket_btn = types.InlineKeyboardButton(text=product_name, callback_data=f'basket_product_delete_{product_id}')
         basket_kb.add(basket_btn)
-        user_products += f'{product_name}\n'
+        user_products += f'**{product_name}**\n'
         total_cost += product_price
-    basket_kb.add(kb_main.return_btn)
-    bot.edit_message_text(text=f'Вот ваш список покупок:\n{user_products}\nЕсли вы хотите убрать какой-то продукт из списка, нажмите на кнопку с его названием', 
-    chat_id=callback.message.chat.id, message_id=callback.message.id, reply_markup=basket_kb)
+    delete_all_btn = types.InlineKeyboardButton(text='Удалить все продукты', callback_data='delete_all_products_from_basket')
+    basket_kb.add(delete_all_btn, kb_main.return_btn)
+    bot.edit_message_text(text=f'Вот ваш список покупок:\n\n{user_products}\nИтоговая стоимость: {total_cost}\n\nЕсли вы хотите убрать какой-то продукт из списка, нажмите на кнопку с его названием', 
+    chat_id=callback.message.chat.id, message_id=callback.message.id, reply_markup=basket_kb, parse_mode='markdown')
     
+
+def delete_product_from_basket(callback):
+    product_id = callback.data.split('_')[-1]
+    cursor.execute(f'''SELECT * FROM shop_basket WHERE id = {product_id}''')
+    product_data = cursor.fetchone()
+    cursor.execute(f'''DELETE FROM shop_basket WHERE id = {product_data[0]} AND 
+    user_id = {product_data[1]} AND 
+    product_id = {product_data[2]} AND 
+    cost = {product_data[3]}''')
+    bot.edit_message_text(text='Продукт успешно удален!', chat_id=callback.message.chat.id, message_id=callback.message.id, 
+    reply_markup=kb_main.return_keyboard)
+
+
+def delete_all_products_from_basket(callback):
+    cursor.execute(f'''SELECT * FROM shop_basket WHERE user_id = {callback.from_user.id}''')
+    all_products = cursor.fetchall()
+    cursor.execute(f'''DELETE FROM shop_basket WHERE user_id = {callback.from_user.id}''')
+    bot.edit_message_text(text=f'Удалено {len(all_products)} продуктов!', message_id=callback.message.id, chat_id=callback.message.chat.id, 
+    reply_markup=kb_main.return_keyboard)
 
 
 def bot_register_categories_handlers():
@@ -124,3 +144,5 @@ def bot_register_categories_handlers():
     bot.register_callback_query_handler(display_product_info, func=lambda callback: 'choose_product_' in callback.data)
     bot.register_callback_query_handler(add_to_shop_basket, func=lambda callback: 'add_to_basket_' in callback.data)
     bot.register_callback_query_handler(display_shop_basket, func=lambda callback: callback.data == 'view_shop_basket')
+    bot.register_callback_query_handler(delete_product_from_basket, func=lambda callback: 'basket_product_delete_' in callback.data)
+    bot.register_callback_query_handler(delete_all_products_from_basket, func=lambda callback: callback.data == 'delete_all_products_from_basket')
