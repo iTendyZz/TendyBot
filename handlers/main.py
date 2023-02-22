@@ -36,12 +36,29 @@ def start_message(message):
     
 
 def show_buys(callback):
-    cursor.execute(f'''SELECT login, password, product_name FROM user_logins WHERE user_id = {callback.from_user.id}''')
+    cursor.execute(f'''SELECT DISTINCT product_name FROM user_logins WHERE user_id = {callback.from_user.id}''')
     logins_info = cursor.fetchall()
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    for product_name in logins_info:
+        btn = types.InlineKeyboardButton(text=product_name[0], callback_data=f'show_product_{product_name[0]}')
+        kb.add(btn)
+    kb.add(kb_main.return_btn)
+    bot.edit_message_text(text=f'Ваши покупки:\n', message_id=callback.message.id, chat_id=callback.message.chat.id, reply_markup=kb)
+
+
+def show_purchase(callback):
+    purchase_name = callback.data.split('_')[-1]
+    cursor.execute(f'''SELECT login, password 
+    FROM user_logins 
+    WHERE user_id = {callback.from_user.id} AND 
+    product_name = "{purchase_name}"''')
+    logins_data = cursor.fetchall()
     info = ''
-    for login, password, product_name in logins_info:
-        info += f'{login}:{password} ({product_name})\n'
-    bot.edit_message_text(text=f'Ваши покупки:\n{info}', message_id=callback.message.id, chat_id=callback.message.chat.id, reply_markup=kb_main.return_keyboard)
+    for login, password in logins_data:
+        info += f'{login}:{password}\n'
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    kb.add(types.InlineKeyboardButton(text='Назад', callback_data='back_to_loginmenu'))
+    bot.edit_message_text(text=info, chat_id=callback.message.chat.id, message_id=callback.message.id, reply_markup=kb)
 
 
 def show_user_chat_id(message):
@@ -55,6 +72,8 @@ def back_to_message(callback):
         start_message(callback.message)
     elif check == 'AdminPanel':
         admin.admin_panel(callback)
+    elif check == 'loginmenu':
+        show_buys(callback)
 
 
 def admin_feedback(callback):
@@ -71,4 +90,5 @@ def bot_register_main_handlers():
     bot.register_callback_query_handler(back_to_message, func=lambda callback: 'back_to_' in callback.data)
     bot.register_message_handler(show_user_chat_id, commands=['show_id'])
     bot.register_callback_query_handler(show_buys, func=lambda callback: 'show_buys_' in callback.data)
+    bot.register_callback_query_handler(show_purchase, func=lambda callback: 'show_product_' in callback.data)
 
