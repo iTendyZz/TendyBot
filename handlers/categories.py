@@ -2,29 +2,49 @@ from config import bot, cursor, db
 from telebot import types
 from keyboards import main as kb_main
 from handlers import main as hand_main
+from keyboards import admin as kb_admin
 
 
 def register_category_request(callback):
+    bot.delete_message(callback.message.chat.id, callback.message.id)
     sent = bot.send_message(callback.message.chat.id, 'Введите название категории')
-    bot.register_next_step_handler(sent, register_category, callback.message.text)
+    bot.register_next_step_handler(sent, register_category)
 
 
-def register_category(sent, message):
+def register_category(message):
     new_category = message.text
-    
+    kb = types.InlineKeyboardMarkup()
+    kb.add(kb_admin.admin_return_btn)
     cursor.execute('''SELECT name FROM categories''')
     categories = cursor.fetchall()
     if new_category not in categories:
         cursor.execute(f'''INSERT INTO categories(name) VALUES('{new_category}'); ''')
         db.commit()
-        bot.send_message(message.chat.id, 'Категория добавлена!')
+        bot.send_message(message.chat.id, 'Категория добавлена!', reply_markup=kb)
     else:
         bot.send_message(message.chat.id, 'Такая категория уже есть!', reply_markup=kb_main.return_keyboard)
 
 
+def delete_category_request(callback):
+    cursor.execute('''SELECT name FROM categories''')
+    categories = cursor.fetchall()
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    for cat_name in categories:
+        btn = types.InlineKeyboardButton(text=cat_name[0], callback_data=f'delete_cat_by_{cat_name[0]}')
+        kb.add(btn)
+    kb.add(kb_admin.admin_return_btn)
+    bot.edit_message_text(text='Выберите категорию для удаления:', chat_id=callback.message.chat.id, message_id=callback.message.id, reply_markup=kb)
+
+
 def delete_category(callback):
-    pass
-    
+    catname = callback.data.split('_')[-1]
+    cursor.execute(f'''DELETE FROM categories WHERE name = "{catname}"''')
+    db.commit()
+    kb = types.InlineKeyboardMarkup()
+    kb.add(kb_admin.admin_return_btn)
+    bot.edit_message_text(text='Категория успешно удалена!', chat_id=callback.message.chat.id, message_id=callback.message.id, 
+    reply_markup=kb)
+
 
 def display_categories(callback):
     category_kbd = types.InlineKeyboardMarkup(row_width=1) 
@@ -136,6 +156,62 @@ def delete_all_products_from_basket(callback):
     reply_markup=kb_main.return_keyboard)
 
 
+def add_product_to_category(callback):
+    kb = types.InlineKeyboardMarkup()
+    kb.add(kb_admin.admin_return_btn)
+    sent = bot.edit_message_text(chat_id=callback.message.chat.id, text='''Вводите данные о продукте с каждой новой строки без нумерации пунктов! Порядок:
+    
+Имя товара
+Цена
+Описание товара
+Далее вам предложат выбрать категорию для товара''', message_id=callback.message.id, reply_markup=kb)
+    bot.register_next_step_handler(sent, request_category_for_product, callback.message.id)
+
+
+def request_category_for_product(message, main_message_id):
+    prod_info = message.text.split('\n')
+    bot.delete_message(message.chat.id, message.id)
+    cursor.execute(f'''INSERT INTO products(product_name, price, description) VALUES(
+    "{prod_info[0]}", 
+    {prod_info[1]}, 
+    "{prod_info[2]}");''')
+    db.commit()
+    cursor.execute('''SELECT * FROM categories''')
+    categories = cursor.fetchall()
+    cursor.execute(f'''SELECT id FROM products WHERE product_name = "{prod_info[0]}"''')
+    prod_id = cursor.fetchone()[0]
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    for cat_id, cat_name in categories:
+        btn = types.InlineKeyboardButton(text=cat_name, callback_data=f'add_new_prod_to_{cat_id}_{prod_id}')
+        kb.add(btn)
+    cancel = types.InlineKeyboardButton(text='Нет нужной категории', callback_data=f'cancel_adding_prod_{prod_id}')
+    kb.add(cancel)
+    bot.edit_message_text('Выберите категорию', message_id=main_message_id, chat_id=message.chat.id, reply_markup=kb)
+
+        
+def add_product_to_category_final(callback):
+    print(callback.data)
+    category = int(callback.data.split('_')[-2])
+    product = int(callback.data.split('_')[-1])
+    print(category, product)
+    cursor.execute(f'''UPDATE products SET category = {category} WHERE id = {product}''')
+    db.commit()
+    kb = types.InlineKeyboardMarkup()
+    kb.add(kb_admin.admin_return_btn)
+    bot.edit_message_text(text='Продукт успешно добавлен!', chat_id=callback.message.chat.id, message_id=callback.message.id, 
+    reply_markup=kb)
+
+
+def cancel_product(callback):
+    prod = int(callback.data.split('_')[-1])
+    cursor.execute(f'''DELETE FROM products WHERE id = {prod}''')
+    db.commit()
+    kb = types.InlineKeyboardMarkup()
+    kb.add(kb_admin.admin_return_btn)
+    bot.edit_message_text(text='Добавление продукта отменено. Добавьте нужную вам категорию и попробуйте еще раз!', 
+    chat_id=callback.message.chat.id, message_id=callback.message.id, reply_markup=kb)
+
+
 def bot_register_categories_handlers():
     bot.register_callback_query_handler(register_category_request, func=lambda callback: callback.data == 'register_new_category')
     bot.register_callback_query_handler(display_categories, func=lambda callback: callback.data == 'send_catalog')
@@ -146,3 +222,8 @@ def bot_register_categories_handlers():
     bot.register_callback_query_handler(display_shop_basket, func=lambda callback: callback.data == 'view_shop_basket')
     bot.register_callback_query_handler(delete_product_from_basket, func=lambda callback: 'basket_product_delete_' in callback.data)
     bot.register_callback_query_handler(delete_all_products_from_basket, func=lambda callback: callback.data == 'delete_all_products_from_basket')
+    bot.register_callback_query_handler(delete_category_request, func=lambda callback: callback.data == 'delete_category')
+    bot.register_callback_query_handler(delete_category, func=lambda callback: 'delete_cat_by_' in callback.data)
+    bot.register_callback_query_handler(add_product_to_category, func=lambda callback: callback.data == 'register_new_product')
+    bot.register_callback_query_handler(add_product_to_category_final, func=lambda callback: 'add_new_prod_to_' in callback.data)
+    bot.register_callback_query_handler(cancel_product, func=lambda callback: 'cancel_adding_prod_' in callback.data)
