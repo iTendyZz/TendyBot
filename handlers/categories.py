@@ -26,19 +26,21 @@ def register_category(message):
 
 
 def delete_category_request(callback):
-    cursor.execute('''SELECT name FROM categories''')
+    cursor.execute('''SELECT * FROM categories''')
     categories = cursor.fetchall()
     kb = types.InlineKeyboardMarkup(row_width=1)
-    for cat_name in categories:
-        btn = types.InlineKeyboardButton(text=cat_name[0], callback_data=f'delete_cat_by_{cat_name[0]}')
+    for cat_id, cat_name in categories:
+        btn = types.InlineKeyboardButton(text=cat_name, callback_data=f'delete_cat_by_{cat_id}')
         kb.add(btn)
     kb.add(kb_admin.admin_return_btn)
     bot.edit_message_text(text='Выберите категорию для удаления:', chat_id=callback.message.chat.id, message_id=callback.message.id, reply_markup=kb)
 
 
 def delete_category(callback):
-    catname = callback.data.split('_')[-1]
-    cursor.execute(f'''DELETE FROM categories WHERE name = "{catname}"''')
+    cat_id = callback.data.split('_')[-1]
+    cursor.execute(f'''DELETE FROM categories WHERE id = {cat_id}''')
+    db.commit()
+    cursor.execute(f'''DELETE FROM products WHERE category = {cat_id}''')
     db.commit()
     kb = types.InlineKeyboardMarkup()
     kb.add(kb_admin.admin_return_btn)
@@ -212,6 +214,42 @@ def cancel_product(callback):
     chat_id=callback.message.chat.id, message_id=callback.message.id, reply_markup=kb)
 
 
+def choose_delete_product_category(callback):
+    cursor.execute(f'''SELECT * FROM categories''')
+    categories = cursor.fetchall()
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    for id, category in categories:
+        btn = types.InlineKeyboardButton(text=category, callback_data=f'go_to_product_category_{id}')
+        kb.add(btn)
+    kb.add(kb_admin.admin_return_btn)
+    bot.edit_message_text(text='Выберите категорию', chat_id=callback.message.chat.id, message_id=callback.message.id, 
+    reply_markup=kb)
+
+
+def delete_product_from_category(callback):
+    category = callback.data.split('_')[-1]
+    cursor.execute(f'''SELECT id, product_name FROM products WHERE category = {category}''')
+    products = cursor.fetchall()
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    for id, product in products:
+        btn = types.InlineKeyboardButton(text=product, callback_data=f'delete_product_by_id_{id}')
+        kb.add(btn)
+    back = types.InlineKeyboardButton(text='Назад', callback_data='delete_product')
+    kb.add(back)
+    bot.edit_message_text(text='Выберите продукт', chat_id=callback.message.chat.id, message_id=callback.message.id, 
+    reply_markup=kb)
+
+
+def delete_product_from_category_final(callback):
+    product = callback.data.split('_')[-1]
+    cursor.execute(f'''DELETE FROM products WHERE id = {product}''')
+    db.commit()
+    kb = types.InlineKeyboardMarkup()
+    kb.add(kb_admin.admin_return_btn)
+    bot.edit_message_text(text='Продукт успешно удален!', chat_id=callback.message.chat.id, message_id=callback.message.id, 
+    reply_markup=kb)
+
+
 def bot_register_categories_handlers():
     bot.register_callback_query_handler(register_category_request, func=lambda callback: callback.data == 'register_new_category')
     bot.register_callback_query_handler(display_categories, func=lambda callback: callback.data == 'send_catalog')
@@ -227,3 +265,6 @@ def bot_register_categories_handlers():
     bot.register_callback_query_handler(add_product_to_category, func=lambda callback: callback.data == 'register_new_product')
     bot.register_callback_query_handler(add_product_to_category_final, func=lambda callback: 'add_new_prod_to_' in callback.data)
     bot.register_callback_query_handler(cancel_product, func=lambda callback: 'cancel_adding_prod_' in callback.data)
+    bot.register_callback_query_handler(choose_delete_product_category, func=lambda callback: callback.data == 'delete_product')
+    bot.register_callback_query_handler(delete_product_from_category, func=lambda callback: 'go_to_product_category_' in callback.data)
+    bot.register_callback_query_handler(delete_product_from_category_final, func=lambda callback: 'delete_product_by_id_' in callback.data)
