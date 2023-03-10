@@ -5,7 +5,12 @@ from keyboards import admin as kb_admin
 from db import admin as db_admin
 
 def admin_panel(callback):
-    bot.edit_message_text(chat_id=callback.message.chat.id, message_id=callback.message.id, text='Вот твоя админская панель:', 
+    cursor.execute(f'''SELECT users.username, admin.level FROM users
+    INNER JOIN admin ON users.user_id = admin.admin_id 
+    WHERE user_id = {callback.from_user.id}''')
+    info = cursor.fetchone()
+    bot.edit_message_text(chat_id=callback.message.chat.id, message_id=callback.message.id, text=f'''@{info[0]}/lvl:{info[1]}
+Вот твоя админская панель:''', 
     reply_markup=kb_admin.admin_menu_keyboard)
 
 

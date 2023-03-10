@@ -108,7 +108,7 @@ def display_product_info(callback):
 
 def add_to_shop_basket(callback):
     product_id = int(callback.data.split('_')[-1])
-    cursor.execute(f'''SELECT price_max_disсount FROM products WHERE id = {product_id}''')
+    cursor.execute(f'''SELECT pricemaxdisсount FROM products WHERE id = {product_id}''')
     product_cost = cursor.fetchone()[0]
     cursor.execute(f'''INSERT INTO shop_basket(user_id, product_id, cost) VALUES({callback.from_user.id}, 
     {product_id}, {product_cost})''')
@@ -173,8 +173,9 @@ def add_product_to_category(callback):
 def request_category_for_product(message, main_message_id):
     prod_info = message.text.split('\n')
     bot.delete_message(message.chat.id, message.id)
-    cursor.execute(f'''INSERT INTO products(product_name, price, description) VALUES(
+    cursor.execute(f'''INSERT INTO products(product_name, price, priceMaxDiscount, description) VALUES(
     "{prod_info[0]}", 
+    {prod_info[1]},
     {prod_info[1]}, 
     "{prod_info[2]}");''')
     db.commit()
@@ -250,6 +251,112 @@ def delete_product_from_category_final(callback):
     reply_markup=kb)
 
 
+def change_prod_info_category(callback):
+    cursor.execute('''SELECT * FROM categories''')
+    categories = cursor.fetchall()
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    for id, name in categories:
+        btn = types.InlineKeyboardButton(text=name, callback_data=f'change_prod_info_by_category_{id}')
+        kb.add(btn)
+    kb.add(kb_admin.admin_return_btn)
+    bot.edit_message_text(text='Выберите категорию', chat_id=callback.message.chat.id, message_id=callback.message.id, 
+    reply_markup=kb)
+
+
+def change_prod_info_product(callback):
+    category = int(callback.data.split('_')[-1])
+    cursor.execute(f'''SELECT id, product_name FROM products WHERE category = {category}''')
+    products = cursor.fetchall()
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    for id, name in products:
+        btn = types.InlineKeyboardButton(text=name, callback_data=f'change_prod_info_by_prod_{id}')
+        kb.add(btn)
+    back = types.InlineKeyboardButton(text='Назад', callback_data='change_product_info')
+    kb.add(back)
+    bot.edit_message_text(text='Выберите продукт', chat_id=callback.message.chat.id, message_id=callback.message.id, 
+    reply_markup=kb)
+
+
+def choose_prod_option_request(callback):
+    product = int(callback.data.split('_')[-1])
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    btn1 = types.InlineKeyboardButton(text='Имя продукта', callback_data=f'change%prod%product_name%{product}')
+    btn2 = types.InlineKeyboardButton(text='Цена', callback_data=f'change%prod%price%{product}')
+    btn3 = types.InlineKeyboardButton(text='Скидка', callback_data=f'change%prod%discount%{product}')
+    btn4 = types.InlineKeyboardButton(text='Категория', callback_data=f'change%prod%category%{product}')
+    btn5 = types.InlineKeyboardButton(text='Описание', callback_data=f'change%prod%description%{product}')
+    kb.add(btn1, btn2, btn3, btn4, btn5, kb_admin.admin_return_btn)
+    bot.edit_message_text(text='Выберите редактируемый параметр', chat_id=callback.message.chat.id, message_id=callback.message.id, 
+    reply_markup=kb)
+
+
+def change_prod_option(callback):
+    option = callback.data.split('%')[-2]
+    print(option)
+    product = int(callback.data.split('%')[-1])
+    main_message_id = callback.message.id
+    if option == 'discount':
+        sent = bot.send_message(callback.message.chat.id, 'Введите новое значение скидки без знака процента')
+        bot.register_next_step_handler(sent, change_prod_option_final, option, product, main_message_id)
+    elif option == 'category':
+        cursor.execute('''SELECT * FROM categories''')
+        categories = cursor.fetchall()
+        kb = types.InlineKeyboardMarkup(row_width=1)
+        for id, name in categories:
+            btn = types.InlineKeyboardButton(text=name, callback_data=f'change_product_category_{product}_{id}')
+            kb.add(btn)
+        bot.edit_message_text(text='Выберите новую категорию', chat_id=callback.message.chat.id, message_id=callback.message.id, reply_markup=kb)
+    else:
+        sent = bot.send_message(callback.message.chat.id, 'Введите новое значение')
+        bot.register_next_step_handler(sent, change_prod_option_final, option, product, main_message_id)
+
+
+def change_prod_option_final(message, option, product, main_message_id):
+    bot.delete_message(message.chat.id, message.id)
+    bot.delete_message(message.chat.id, message.id - 1)
+    if option == 'discount':
+        cursor.execute(f'''SELECT price FROM products WHERE id = {product}''')
+        price = cursor.fetchone()[0]
+        price_max_disсount = int(price * ((100 - int(message.text))/100))
+        print(price)
+        print(price_max_disсount)
+        print(product)
+        cursor.execute(f'''UPDATE products 
+        SET 'priceMaxDiscount' = {price_max_disсount} 
+        WHERE id = {product}''')
+        db.commit()
+        kb = types.InlineKeyboardMarkup()
+        kb.add(kb_admin.admin_return_btn)
+        bot.edit_message_text(text=f'Параметр {option} успешно изменен!', chat_id=message.chat.id, message_id=main_message_id,
+        reply_markup=kb)
+    elif option == 'price': 
+        price = int(message.text)
+        cursor.execute(f'''UPDATE products SET price = {price} WHERE id = {product}''')
+        db.commit()
+        kb = types.InlineKeyboardMarkup()
+        kb.add(kb_admin.admin_return_btn)
+        bot.edit_message_text(text=f'Параметр {option} успешно изменен!', chat_id=message.chat.id, message_id=main_message_id,
+        reply_markup=kb)
+    else:
+        cursor.execute(f'''UPDATE products SET {option} = "{message.text}" WHERE id = {product}''')
+        db.commit()
+        kb = types.InlineKeyboardMarkup()
+        kb.add(kb_admin.admin_return_btn)
+        bot.edit_message_text(text=f'Параметр {option} успешно изменен!', chat_id=message.chat.id, message_id=main_message_id,
+        reply_markup=kb)
+
+
+def change_product_category(callback):
+    product = int(callback.data.split('_')[-2])
+    category = int(callback.data.split('_')[-1])
+    cursor.execute(f'''UPDATE products SET category = {category} WHERE id = {product}''')
+    db.commit()
+    kb = types.InlineKeyboardMarkup()
+    kb.add(kb_admin.admin_return_btn)
+    bot.edit_message_text(text='Категория успешно изменена!', chat_id=callback.message.chat.id, message_id=callback.message.id,
+    reply_markup=kb)
+
+
 def bot_register_categories_handlers():
     bot.register_callback_query_handler(register_category_request, func=lambda callback: callback.data == 'register_new_category')
     bot.register_callback_query_handler(display_categories, func=lambda callback: callback.data == 'send_catalog')
@@ -268,3 +375,8 @@ def bot_register_categories_handlers():
     bot.register_callback_query_handler(choose_delete_product_category, func=lambda callback: callback.data == 'delete_product')
     bot.register_callback_query_handler(delete_product_from_category, func=lambda callback: 'go_to_product_category_' in callback.data)
     bot.register_callback_query_handler(delete_product_from_category_final, func=lambda callback: 'delete_product_by_id_' in callback.data)
+    bot.register_callback_query_handler(change_prod_info_category, func=lambda callback: callback.data == 'change_product_info')
+    bot.register_callback_query_handler(change_prod_info_product, func=lambda callback: 'change_prod_info_by_category_' in callback.data)
+    bot.register_callback_query_handler(choose_prod_option_request, func=lambda callback: 'change_prod_info_by_prod_' in callback.data)
+    bot.register_callback_query_handler(change_prod_option, func=lambda callback: 'change%prod%' in callback.data)
+    bot.register_callback_query_handler(change_product_category, func=lambda callback: 'change_product_category_' in callback.data)
